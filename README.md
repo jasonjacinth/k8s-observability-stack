@@ -191,4 +191,4 @@ See [RUNBOOK.md](RUNBOOK.md) for detailed response procedures.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+See [LICENSE](LICENSE) for details.
