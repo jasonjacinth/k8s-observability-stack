@@ -1,0 +1,21 @@
+# macOS Metadata
+.DS_Store
+Thumbs.db
+
+# Go / Binary Files (for your exporters)
+bin/
+dist/
+*.exe
+*.test
+*.out
+
+# Environment / Secrets (Critical for K8s projects)
+.env
+*.pem
+*.key
+
+# IDE specific (Cursor/VS Code)
+.vscode/
+
+# AI / coding assistant configuration
+.agents/
