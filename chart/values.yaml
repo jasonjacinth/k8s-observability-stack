@@ -1,0 +1,35 @@
+# Default values for k8s-observability-stack
+
+# General Configuration
+namespace: observability
+
+# Task Processor Application
+taskProcessor:
+  image:
+    repository: ghcr.io/jasonjacinth/k8s-observability-stack
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetAverageQueueDepth: "10"
+
+# Component Versions
+prometheus:
+  image: prom/prometheus:v2.45.0
+grafana:
+  image: grafana/grafana:latest
+adapter:
+  image: registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.11.2
+alertmanager:
+  image: prom/alertmanager:v0.26.0

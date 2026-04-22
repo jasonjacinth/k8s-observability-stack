@@ -2,11 +2,10 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: prometheus-adapter
-  namespace: observability
+  namespace: {{ .Values.namespace }}
   labels:
     app: prometheus-adapter
 ---
-# Allows the adapter to read resource information and serve the custom metrics API.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -31,9 +30,8 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: prometheus-adapter
-    namespace: observability
+    namespace: {{ .Values.namespace }}
 ---
-# Delegate authentication decisions to the kube-apiserver.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -47,9 +45,8 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: prometheus-adapter
-    namespace: observability
+    namespace: {{ .Values.namespace }}
 ---
-# Allow the adapter to read the extension-apiserver-authentication ConfigMap.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -64,9 +61,8 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: prometheus-adapter
-    namespace: observability
+    namespace: {{ .Values.namespace }}
 ---
-# Allow the HPA controller to read custom metrics.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -91,9 +87,8 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: prometheus-adapter
-    namespace: observability
+    namespace: {{ .Values.namespace }}
 ---
-# Allow system:kube-controller-manager to read custom metrics (needed for HPA).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -109,19 +104,16 @@ subjects:
     name: horizontal-pod-autoscaler
     namespace: kube-system
 ---
-# Adapter configuration: maps tasks_in_queue from Prometheus to the Custom Metrics API.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-adapter-config
-  namespace: observability
+  namespace: {{ .Values.namespace }}
   labels:
     app: prometheus-adapter
 data:
   config.yaml: |
     rules:
-      # Expose tasks_in_queue as a pod-level custom metric.
-      # The HPA will query: custom.metrics.k8s.io/v1beta1/namespaces/observability/pods/*/tasks_in_queue
       - seriesQuery: 'tasks_in_queue{namespace!="",pod!=""}'
         resources:
           overrides:
@@ -136,7 +128,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus-adapter
-  namespace: observability
+  namespace: {{ .Values.namespace }}
   labels:
     app: prometheus-adapter
 spec:
@@ -152,9 +144,9 @@ spec:
       serviceAccountName: prometheus-adapter
       containers:
         - name: prometheus-adapter
-          image: registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.11.2
+          image: {{ .Values.adapter.image }}
           args:
-            - --prometheus-url=http://prometheus.observability.svc.cluster.local:9090
+            - --prometheus-url=http://prometheus.{{ .Values.namespace }}.svc.cluster.local:9090
             - --metrics-relist-interval=30s
             - --config=/etc/adapter/config.yaml
             - --secure-port=6443
@@ -201,7 +193,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus-adapter
-  namespace: observability
+  namespace: {{ .Values.namespace }}
   labels:
     app: prometheus-adapter
 spec:
@@ -214,7 +206,6 @@ spec:
       targetPort: https
       protocol: TCP
 ---
-# Register the adapter as an API extension so the HPA controller can discover it.
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
 metadata:
@@ -224,7 +215,7 @@ metadata:
 spec:
   service:
     name: prometheus-adapter
-    namespace: observability
+    namespace: {{ .Values.namespace }}
   group: custom.metrics.k8s.io
   version: v1beta1
   insecureSkipTLSVerify: true

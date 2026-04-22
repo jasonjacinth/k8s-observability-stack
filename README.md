@@ -1,34 +1,41 @@
 # K8s Observability and Auto-Scaling Stack
 
-A production-style Kubernetes observability stack featuring a custom Go application with Prometheus metrics, Grafana dashboards, custom-metrics-driven HPA autoscaling, and Alertmanager-based alerting with operational runbooks.
+A production-ready Kubernetes observability stack featuring a custom Go application with Prometheus metrics, custom-metrics-driven HPA autoscaling, and Alertmanager routing, fully packaged as a Helm Chart with automated GitHub Actions CI/CD workflows.
 
 ## Architecture
 
-```
-                         +-------------------+
-                         |   Grafana         |
-                         |   (Dashboards)    |
-                         +--------+----------+
-                                  |
-                         +--------v----------+
-                +------->|   Prometheus      |<------+
-                |        |   (Scrape/Store)  |       |
-                |        +--------+----------+       |
-                |                 |                   |
-        +-------+-------+  +-----v------+   +-------+--------+
-        | Alertmanager  |  | Prometheus |   | task-processor  |
-        | (Routing)     |  | Adapter    |   | (Go App)        |
-        +---------------+  +-----+------+   | /metrics        |
-                                  |         | /enqueue        |
-                           +------v------+  | /dequeue        |
-                           | K8s Custom  |  +----------------+
-                           | Metrics API |
-                           +------+------+
-                                  |
-                           +------v------+
-                           |     HPA     |
-                           | (Autoscaler)|
-                           +-------------+
+```text
+[ GitHub Actions ] -- Builds/Pushes --> [ GHCR Image Registry ]
+        |
+     Updates
+        v
+  [ Helm Chart ] ----- Deploys Stack ----+
+                                         |
+                                         v
+                          +-------------------+
+                          |   Grafana         |
+                          |   (Dashboards)    |
+                          +--------+----------+
+                                   |
+                          +--------v----------+
+                 +------->|   Prometheus      |<------+
+                 |        |   (Scrape/Store)  |       |
+                 |        +--------+----------+       |
+                 |                 |                   |
+         +-------+-------+  +-----v------+   +-------+--------+
+         | Alertmanager  |  | Prometheus |   | task-processor  |
+         | (Routing)     |  | Adapter    |   | (Go App)        |
+         +---------------+  +-----+------+   | /metrics        |
+                                   |         | /enqueue        |
+                            +------v------+  | /dequeue        |
+                            | K8s Custom  |  +----------------+
+                            | Metrics API |
+                            +------+------+
+                                   |
+                            +------v------+
+                            |     HPA     |
+                            | (Autoscaler)|
+                            +-------------+
 ```
 
 ## Project Structure
@@ -39,24 +46,18 @@ project/
     main.go                   # HTTP server with Prometheus metrics
     Dockerfile                # Multi-stage container build (Go 1.26 / Alpine 3.20)
     go.mod / go.sum           # Go module dependencies
-  k8s/
-    base/                     # Core application manifests
-      namespace.yaml          # observability namespace
-      deployment.yaml         # task-processor Deployment
-      service.yaml            # task-processor Service
-    prometheus/               # Prometheus server
-      prometheus-config.yaml  # Scrape config with K8s SD and alerting
-      prometheus-deploy.yaml  # Deployment, RBAC, Service
-    grafana/                  # Grafana dashboards
-      grafana-deploy.yaml     # Deployment, Service, datasource provisioning
-      grafana-dashboard.yaml  # Dashboard JSON (ConfigMap)
-    adapter/                  # Custom Metrics API bridge
-      prometheus-adapter.yaml # Adapter Deployment, RBAC, APIService
-      hpa.yaml                # HorizontalPodAutoscaler (v2)
-    alerting/                 # Alertmanager and alert rules
-      prometheus-rules.yaml   # Alerting and recording rules
-      alertmanager-deploy.yaml # Alertmanager Deployment, Config, Service
-  RUNBOOK.md                    # Operational runbook for alert response
+  chart/                      # Helm Chart for the entire stack
+    Chart.yaml
+    values.yaml               # Centralized configuration (image repo, replicas)
+    templates/
+      task-processor.yaml     # Core application & HPA
+      prometheus.yaml         # Prometheus server & config
+      grafana.yaml            # Grafana & dashboards
+      adapter.yaml            # Custom Metrics API bridge
+      alertmanager.yaml       # Alerting rules & manager
+  .github/workflows/          # GitHub Actions CI/CD
+    ci.yaml                   # Automated Docker build & GHCR push
+  RUNBOOK.md                  # Operational runbook for alert response
 ```
 
 ## Quick Start
@@ -66,6 +67,7 @@ project/
 - [Docker](https://docs.docker.com/get-docker/)
 - [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/) or [Minikube](https://minikube.sigs.k8s.io/docs/start/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [Helm v3](https://helm.sh/docs/intro/install/)
 
 ### 1. Create a Local Cluster
 
@@ -77,66 +79,43 @@ kind create cluster --name observability
 minikube start --profile observability
 ```
 
-### 2. Build and Load the Application Image
+### 2. Build and Load the Application Image (Local Dev)
+
+*Note: For production, the CI/CD pipeline pushes images to GHCR.*
 
 ```bash
-# Build the container image
-docker build -t task-processor:latest ./app
+# Build the container image locally
+docker build -t ghcr.io/jasonjacinth/k8s-observability-stack:latest ./app
 
 # Load into Kind
-kind load docker-image task-processor:latest --name observability
-
-# Or load into Minikube
-minikube image load task-processor:latest --profile observability
+kind load docker-image ghcr.io/jasonjacinth/k8s-observability-stack:latest --name observability
 ```
 
-### 3. Deploy the Application
+### 3. Deploy the Stack using Helm
+
+Instead of applying raw YAML files one by one, deploy the entire observability stack and application with a single Helm command:
 
 ```bash
-kubectl apply -f k8s/base/namespace.yaml
-kubectl apply -f k8s/base/deployment.yaml
-kubectl apply -f k8s/base/service.yaml
+# Install the chart and create the namespace
+helm install observability-stack ./chart -n observability --create-namespace
 ```
 
-### 4. Deploy Prometheus, Grafana, and Alerting
+### 4. Verify
 
 ```bash
-# Prometheus (with alerting rules and Alertmanager routing)
-kubectl apply -f k8s/alerting/prometheus-rules.yaml
-kubectl apply -f k8s/prometheus/prometheus-config.yaml
-kubectl apply -f k8s/prometheus/prometheus-deploy.yaml
-
-# Grafana
-kubectl apply -f k8s/grafana/grafana-dashboard.yaml
-kubectl apply -f k8s/grafana/grafana-deploy.yaml
-
-# Alertmanager
-kubectl apply -f k8s/alerting/alertmanager-deploy.yaml
-```
-
-### 5. Deploy Prometheus Adapter and HPA
-
-```bash
-kubectl apply -f k8s/adapter/prometheus-adapter.yaml
-kubectl apply -f k8s/adapter/hpa.yaml
-```
-
-### 6. Verify
-
-```bash
-# Check all pods are running
+# Check all pods are running (wait a minute for all containers to pull and start)
 kubectl get pods -n observability
 
 # Port-forward to test the app
 kubectl port-forward -n observability svc/task-processor 8080:80
 
-# In another terminal
+# In another terminal: enqueue tasks
 curl http://localhost:8080/healthz
 curl -X POST http://localhost:8080/enqueue
 curl http://localhost:8080/metrics | grep tasks_in_queue
 ```
 
-### 7. Access UIs
+### 5. Access UIs
 
 ```bash
 # Prometheus UI (http://localhost:9090)
@@ -149,7 +128,7 @@ kubectl port-forward -n observability svc/grafana 3000:3000
 kubectl port-forward -n observability svc/alertmanager 9093:9093
 ```
 
-### 8. Verify HPA and Custom Metrics
+### 6. Verify HPA and Custom Metrics
 
 ```bash
 # Check the Custom Metrics API is registered
@@ -188,6 +167,7 @@ See [RUNBOOK.md](RUNBOOK.md) for detailed response procedures.
 - **Phase 2**: Prometheus and Grafana deployment with scrape configuration
 - **Phase 3**: Prometheus Adapter and HPA for custom-metric-based autoscaling
 - **Phase 4**: Alertmanager rules and operational runbooks
+- **Phase 5**: Helm Chart packaging and GitHub Actions CI/CD automation
 
 ## License
 

@@ -1,8 +1,53 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: prometheus-rules
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: prometheus
+data:
+  alerting-rules.yml: |
+    groups:
+      - name: task-processor-alerts
+        rules:
+          - alert: HighQueueBacklog
+            expr: sum(tasks_in_queue) > 30
+            for: 2m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "Task queue backlog is critically high"
+              description: "The total tasks_in_queue has exceeded 30 for more than 2 minutes (current value: {{`{{ $value }}`}}). The application may be unable to process tasks fast enough."
+              runbook_url: "https://github.com/jasonjacinth/k8s-observability-stack/blob/main/RUNBOOK.md#highqueuebacklog"
+
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total{namespace="{{ .Values.namespace }}", container="task-processor"}[5m]) > 0
+            for: 3m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "task-processor pod is crash-looping"
+              description: "Pod {{`{{ $labels.pod }}`}} in namespace {{`{{ $labels.namespace }}`}} has been restarting repeatedly for more than 3 minutes."
+              runbook_url: "https://github.com/jasonjacinth/k8s-observability-stack/blob/main/RUNBOOK.md#podcrashlooping"
+
+      - name: task-processor-recording-rules
+        rules:
+          - record: task_processor:tasks_processed:rate1m
+            expr: sum(rate(tasks_processed_total[1m]))
+
+          - record: task_processor:http_request_duration:avg
+            expr: |
+              sum(rate(http_request_duration_seconds_sum{app="task-processor"}[1m]))
+              /
+              sum(rate(http_request_duration_seconds_count{app="task-processor"}[1m]))
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: alertmanager-config
-  namespace: observability
+  namespace: {{ .Values.namespace }}
   labels:
     app: alertmanager
 data:
@@ -46,7 +91,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: alertmanager
-  namespace: observability
+  namespace: {{ .Values.namespace }}
   labels:
     app: alertmanager
 spec:
@@ -61,7 +106,7 @@ spec:
     spec:
       containers:
         - name: alertmanager
-          image: prom/alertmanager:v0.26.0
+          image: {{ .Values.alertmanager.image }}
           args:
             - "--config.file=/etc/alertmanager/alertmanager.yml"
             - "--storage.path=/alertmanager"
@@ -105,7 +150,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: alertmanager
-  namespace: observability
+  namespace: {{ .Values.namespace }}
   labels:
     app: alertmanager
 spec:
