@@ -15,7 +15,8 @@ dist/
 *.key
 
 # IDE specific (Cursor/VS Code)
+k8s-observability-stack-walkthrough.md
 .vscode/
 
-# AI / coding assistant configuration
+# coding assistant configuration
 .agents/

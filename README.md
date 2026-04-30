@@ -5,7 +5,7 @@ A production-ready Kubernetes observability stack featuring a custom Go applicat
 ## Architecture
 
 ```text
-[ GitHub Actions ] -- Builds/Pushes --> [ GHCR Image Registry ]
+[ GitHub Actions ] -- Lint/Test/Scan/Build/Push --> [ GHCR Image Registry ]
         |
      Updates
         v
@@ -44,6 +44,7 @@ A production-ready Kubernetes observability stack featuring a custom Go applicat
 project/
   app/                        # Go application source
     main.go                   # HTTP server with Prometheus metrics
+    main_test.go              # Unit tests for HTTP handlers
     Dockerfile                # Multi-stage container build (Go 1.26 / Alpine 3.20)
     go.mod / go.sum           # Go module dependencies
   chart/                      # Helm Chart for the entire stack
@@ -56,7 +57,7 @@ project/
       adapter.yaml            # Custom Metrics API bridge
       alertmanager.yaml       # Alerting rules & manager
   .github/workflows/          # GitHub Actions CI/CD
-    ci.yaml                   # Automated Docker build & GHCR push
+    ci.yaml                   # Lint, test, security scan, Docker build & GHCR push
   RUNBOOK.md                  # Operational runbook for alert response
 ```
 
@@ -168,6 +169,7 @@ See [RUNBOOK.md](RUNBOOK.md) for detailed response procedures.
 - **Phase 3**: Prometheus Adapter and HPA for custom-metric-based autoscaling
 - **Phase 4**: Alertmanager rules and operational runbooks
 - **Phase 5**: Helm Chart packaging and GitHub Actions CI/CD automation
+- **Phase 6**: Shift-Left CI (unit tests, linting, Helm validation, Trivy security scanning)
 
 ## License
 
